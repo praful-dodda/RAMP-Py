@@ -1,9 +1,9 @@
 from evaluate_models import *
-from ramp_correction import *
+from ramp_correction_v3 import *
 import argparse
 
 def main(eachYear, model):
-    version = "v1"
+    version = "v3"
     
     ramp_data_dir = './ramp_data'
     ramp_plot_dir = f'ramp_plots/{model}_{eachYear}_{version}'

@@ -1,5 +1,5 @@
 import pandas as pd
-from ramp_correction_parallel import get_overhang_ramp # Import from the new parallel script
+
 # Assuming your other functions are in evaluate_models
 from evaluate_models import run_evaluation_analysis, get_ozone_file
 import argparse
@@ -9,8 +9,18 @@ def main(eachYear, model, num_cores):
     """
     Main function to run RAMP correction analysis.
     """
-    version = "v1-parallel"
-    
+    run_type = "parallel"
+    version_code = "v3"
+    version = f'{version_code}-{run_type}'
+
+    if version_code == "v3":
+        # Import the new parallel version of the RAMP correction
+        from ramp_correction_parallel_v3 import get_overhang_ramp
+    elif version_code == "v1":
+        from ramp_correction_parallel import get_overhang_ramp
+    else:
+        raise ValueError(f"Unsupported version code: {version_code}")
+
     ramp_data_dir = './ramp_data'
     ramp_plot_dir = f'ramp_plots/{model}_{eachYear}_{version}'
 

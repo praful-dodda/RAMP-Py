@@ -21,6 +21,10 @@ except ImportError:
 # --- Configuration ---
 MODEL_NAME = "MERRA2-GMI"
 YEARS = [2016, 2017, 2018]
+parallel_version = "v3"
+# serial_version = ""
+
+# --- Directory setup ---
 RAMP_DATA_DIR = './ramp_data'
 OUTPUT_DIR = './comparison_plots'
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -211,10 +215,13 @@ for year in YEARS:
         print("Skipping this year.")
         continue
 
+    # load serial data
     base_path_l1_serial = f"{RAMP_DATA_DIR}/lambda1_{MODEL_NAME}_{year}"
-    base_path_l1_parallel = f"{RAMP_DATA_DIR}/lambda1_{MODEL_NAME}_{year}_v1-parallel"
     base_path_l2_serial = f"{RAMP_DATA_DIR}/lambda2_{MODEL_NAME}_{year}"
-    base_path_l2_parallel = f"{RAMP_DATA_DIR}/lambda2_{MODEL_NAME}_{year}_v1-parallel"
+
+    # load parallel data
+    base_path_l1_parallel = f"{RAMP_DATA_DIR}/lambda1_{MODEL_NAME}_{year}_{parallel_version}-parallel"
+    base_path_l2_parallel = f"{RAMP_DATA_DIR}/lambda2_{MODEL_NAME}_{year}_{parallel_version}-parallel"
 
     l1_serial_df = load_lambda_data(base_path_l1_serial)
     l1_parallel_df = load_lambda_data(base_path_l1_parallel)
