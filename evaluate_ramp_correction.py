@@ -12,15 +12,15 @@ from preprocess import get_ozone_file
 
 # --- Configuration ---
 # Update these paths to match your file locations and names
-MODEL_NAME = "M3fusion" # The model you are evaluating
+MODEL_NAME = "MERRA2-GMI" # The model you are evaluating
 YEAR = 2017 # The year you ran the analysis for
-VERSION = "v1-parallel" # The version name you used for saving files
-FILE_FORMAT = "csv" # Change to 'parquet' if you prefer that format
+VERSION = "v3-parallel" # The version name you used for saving files
+FILE_FORMAT = "parquet" # Change to 'parquet' if you prefer that format
 
 # File Paths
 RAMP_DATA_DIR = './ramp_data'
 MODEL_DATA_DIR = '.' # Assuming model data is in the current directory
-COLLOCATED_DATA_PATH = f'./ramp_data/collocated_data_{MODEL_NAME}_{YEAR}.{FILE_FORMAT}'
+COLLOCATED_DATA_PATH = f'./ramp_data/collocated_data_{MODEL_NAME}_{YEAR}.csv'
 
 # Ensure the collocated data file exists
 if not os.path.exists(COLLOCATED_DATA_PATH):
@@ -34,6 +34,20 @@ os.makedirs(EVAL_PLOT_DIR, exist_ok=True)
 
 
 # --- Step 1: Data Loading and Preparation ---
+def load_lambda_data(filepath_base):
+    """Tries to load a .parquet file, falls back to .csv."""
+    parquet_path = f"{filepath_base}.parquet"
+    csv_path = f"{filepath_base}.csv"
+    
+    if os.path.exists(parquet_path):
+        print(f"Loading {parquet_path}")
+        return pd.read_parquet(parquet_path)
+    elif os.path.exists(csv_path):
+        print(f"Loading {csv_path}")
+        return pd.read_csv(csv_path)
+    else:
+        print(f"Warning: Could not find file for base path: {filepath_base}")
+        return None
 
 def load_and_prepare_data():
     """
@@ -54,8 +68,10 @@ def load_and_prepare_data():
         print(f"Loaded original model data: {original_model_file}")
 
         # RAMP correction file (lambda1)
-        lambda1_file = f"{RAMP_DATA_DIR}/lambda1_{MODEL_NAME}_{YEAR}_{VERSION}.csv"
-        lambda1_df = pd.read_csv(lambda1_file)
+        lambda1_file = f"{RAMP_DATA_DIR}/lambda1_{MODEL_NAME}_{YEAR}_{VERSION}"
+        lambda1_df = load_lambda_data(lambda1_file)
+        if lambda1_df is None:
+            raise FileNotFoundError(f"Could not find RAMP lambda1 data file: {lambda1_file} in csv or parquet format.")
         print(f"Loaded RAMP lambda1 data: {lambda1_file}")
         
         # Collocated data which contains observations

@@ -1,6 +1,6 @@
 # Global Ozone Data Analysis and Modeling
 
-This repository contains tools and scripts for analyzing global ozone datasets, converting data formats, performing exploratory data analysis (EDA), and training ensemble models. Below is a summary of the key functions and their purposes.
+This repository contains tools and scripts for analyzing global ozone datasets, converting data formats, performing exploratory data analysis (EDA), flexible-RAMP correction, and training ensemble models. Below is a summary of the key functions and their purposes.
 
 ## Functions Summary
 
@@ -23,6 +23,15 @@ This repository contains tools and scripts for analyzing global ozone datasets, 
 ### `csv_to_netcdf_converter.py`
 - **`convert_all_sources_direct(output_dir, selected_sources)`**: Converts all available ozone datasets from yearly CSVs to combined NetCDF files.
 - **`convert_source_to_netcdf_direct(source, output_dir)`**: Converts a single source's yearly CSV files to a combined NetCDF file.
+
+## Scripts Overview
+
+### `ramp_correction_parallel_v3.py`
+
+This script is used for applying a ramp correction to the dataset. It is designed to identify and correct for linear instrumental drift or artifacts in the time-series data. The script leverages parallel processing to efficiently handle large volumes of data, significantly speeding up the preprocessing workflow.
+
+**Key Features:**
+*   Utilizes multiprocessing for enhanced performance.
 
 ### `ozone_stacked_ensemble.py`
 - **`train_stacked_ensemble(df, feature_columns, aux_numeric_cols, output_dir, model_label, debug_rows)`**: Trains a stacked ensemble model and saves artifacts.
