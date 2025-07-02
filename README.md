@@ -24,8 +24,6 @@ This repository contains tools and scripts for analyzing global ozone datasets, 
 - **`convert_all_sources_direct(output_dir, selected_sources)`**: Converts all available ozone datasets from yearly CSVs to combined NetCDF files.
 - **`convert_source_to_netcdf_direct(source, output_dir)`**: Converts a single source's yearly CSV files to a combined NetCDF file.
 
-## Scripts Overview
-
 ### `ramp_correction_parallel_v3.py`
 
 This script is used for applying a ramp correction to the dataset. It is designed to identify and correct for linear instrumental drift or artifacts in the time-series data. The script leverages parallel processing to efficiently handle large volumes of data, significantly speeding up the preprocessing workflow.
