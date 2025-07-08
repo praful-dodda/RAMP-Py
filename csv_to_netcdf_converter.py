@@ -29,7 +29,7 @@ def create_xarray_dataset(df, year, month_cols):
     lons = np.sort(df['lon'].unique())
     
     # Create time array for all months
-    times = pd.date_range(f"{year}-01-15", periods=12, freq='MS')
+    times = pd.to_datetime([f"{year}-{i}-15" for i in range(1, 13)])
     
     # Create empty data array
     data = np.full((len(times), len(lats), len(lons)), np.nan)
@@ -38,8 +38,11 @@ def create_xarray_dataset(df, year, month_cols):
     lat_indices = {lat: i for i, lat in enumerate(lats)}
     lon_indices = {lon: i for i, lon in enumerate(lons)}
     
+    # Sort columns numerically based on the month number, not alphabetically
+    sorted_month_cols = sorted(month_cols, key=lambda x: int(x.split('_')[1]))
+
     # Fill the data array with values from the dataframe
-    for i, month_col in enumerate(sorted(month_cols)):
+    for i, month_col in enumerate(sorted_month_cols):
         month_data = df[['lat', 'lon', month_col]].dropna()
         for _, row in month_data.iterrows():
             if row['lat'] in lat_indices and row['lon'] in lon_indices:
@@ -257,13 +260,13 @@ if __name__ == "__main__":
     # convert_source_to_netcdf_direct("AM4", output_dir="./data/netcdf_combined")
     
     # Or process all sources
-    # convert_all_sources_direct(output_dir="./data/netcdf_combined", 
-    #                        selected_sources=["CAMS", "GEOS-CF", "CESM1-CAM4-Chem", 
-    #                                          "CESM1-WACCM", "CESM2.2", "CHASER", "GEOS-CF", 
-    #                                          "GEOS-chem", "GEOS-GMI", "GFDL-AM3", "MERRA2-GMI", 
-    #                                          "MOCAGE", "MRI-ESM1", "MRI-ESM2", "TCR-2"])
     convert_all_sources_direct(output_dir="./data/netcdf_combined", 
-                           selected_sources=["M3fusion"])
+                           selected_sources=["AM4", "CAMS", "GEOS-CF", "CESM1-CAM4-Chem", 
+                                             "CESM1-WACCM", "CESM2.2", "CHASER", "GEOS-CF", 
+                                             "GEOS-chem", "GEOS-GMI", "GFDL-AM3", "MERRA2-GMI", 
+                                             "MOCAGE", "MRI-ESM1", "MRI-ESM2", "TCR-2"])
+    # convert_all_sources_direct(output_dir="./data/netcdf_combined", 
+    #                        selected_sources=["M3fusion"])
     
     # Or process specific sources
     # convert_all_sources_direct(output_dir="./data/netcdf_combined", 

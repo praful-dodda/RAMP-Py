@@ -215,6 +215,9 @@ def collocate_data_xarray_optimized(toar_df_tagged, model_ds):
     
     # Clean up and format the final dataframe
     final_df = merged_df.drop(columns=['model_lat_idx', 'model_lon_idx'])
+
+    # rename model_lat and model_lon to lat_model and lon_model
+    final_df.rename(columns={'model_lat': 'lat_model', 'model_lon': 'lon_model'}, inplace=True)
     
     print(f"Collocation complete. Generated {len(final_df)} matched data points.")
     
