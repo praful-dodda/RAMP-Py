@@ -12,7 +12,7 @@ from preprocess import get_ozone_file
 
 # --- Configuration ---
 # Update these paths to match your file locations and names
-MODEL_NAME = "MERRA2-GMI" # The model you are evaluating
+MODEL_NAME = "UKML" # The model you are evaluating
 YEAR = 2017 # The year you ran the analysis for
 VERSION = "v3-parallel" # The version name you used for saving files
 FILE_FORMAT = "parquet" # Change to 'parquet' if you prefer that format
@@ -26,7 +26,7 @@ COLLOCATED_DATA_PATH = f'./ramp_data/collocated_data_{MODEL_NAME}_{YEAR}.csv'
 if not os.path.exists(COLLOCATED_DATA_PATH):
     print(f"Error: The collocated data file {COLLOCATED_DATA_PATH} does not exist.")
     print("Please ensure the collocated data is generated and saved before running this script.")
-    exit(1)
+    # exit(1)
 
 # Output directory for evaluation plots
 EVAL_PLOT_DIR = f'ramp_evaluation_plots/{MODEL_NAME}_{YEAR}_{VERSION}'
@@ -75,8 +75,14 @@ def load_and_prepare_data():
         print(f"Loaded RAMP lambda1 data: {lambda1_file}")
         
         # Collocated data which contains observations
-        collocated_df = pd.read_csv(COLLOCATED_DATA_PATH)
-        print(f"Loaded collocated observation data: {COLLOCATED_DATA_PATH}")
+        # Try loading CSV first, then parquet if CSV fails
+        try:
+            collocated_df = pd.read_csv(COLLOCATED_DATA_PATH)
+            print(f"Loaded collocated observation data: {COLLOCATED_DATA_PATH}")
+        except FileNotFoundError:
+            parquet_path = COLLOCATED_DATA_PATH.replace('.csv', '.parquet')
+            collocated_df = pd.read_parquet(parquet_path)
+            print(f"Loaded collocated observation data: {parquet_path}")
 
     except FileNotFoundError as e:
         print(f"Error: Could not find a required data file. {e}")
@@ -216,45 +222,77 @@ def perform_visual_evaluation(eval_df, gridded_long_df):
         print("DataFrames not available. Skipping visualizations.")
         return
 
-    # 3.1: Spatial Difference Maps
+    # 3.1: Spatial Data Preparation
     month_to_plot = 7
     spatial_df = gridded_long_df[gridded_long_df['month'] == month_to_plot]
     spatial_pivot = spatial_df.pivot_table(index=['lon', 'lat'], columns='source', values='ozone').reset_index()
     spatial_pivot['difference'] = spatial_pivot['RAMP-Corrected'] - spatial_pivot['Original Model']
     
+    # --- NEW: Calculate data extent for better map zoom ---
+    lon_min, lon_max = spatial_pivot['lon'].min(), spatial_pivot['lon'].max()
+    lat_min, lat_max = spatial_pivot['lat'].min(), spatial_pivot['lat'].max()
+    # Add a 5% buffer around the data
+    lon_buffer = (lon_max - lon_min) * 0.05
+    lat_buffer = (lat_max - lat_min) * 0.05
+    map_extent = [lon_min - lon_buffer, lon_max + lon_buffer, lat_min - lat_buffer, lat_max + lat_buffer]
+
+
+    # --- Side-by-Side Before and After Map ---
+    # Determine the common color scale
+    vmin = min(spatial_pivot['Original Model'].min(), spatial_pivot['RAMP-Corrected'].min())
+    vmax = max(spatial_pivot['Original Model'].max(), spatial_pivot['RAMP-Corrected'].max())
+    
+    fig, axes = plt.subplots(1, 2, figsize=(18, 6), subplot_kw={'projection': ccrs.PlateCarree()})
+    fig.suptitle(f'Model Ozone Before and After RAMP Correction - Month {month_to_plot}', fontsize=16)
+
+    # Plot Original Model
+    axes[0].add_feature(cfeature.COASTLINE)
+    axes[0].add_feature(cfeature.BORDERS, linestyle=':')
+    sc_orig = axes[0].scatter(spatial_pivot['lon'], spatial_pivot['lat'], c=spatial_pivot['Original Model'],
+                               cmap='viridis', s=1, transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax)
+    axes[0].set_title('Original Model Output')
+    axes[0].set_extent(map_extent, crs=ccrs.PlateCarree()) # Set map extent
+
+    # Plot RAMP-Corrected Model
+    axes[1].add_feature(cfeature.COASTLINE)
+    axes[1].add_feature(cfeature.BORDERS, linestyle=':')
+    sc_ramp = axes[1].scatter(spatial_pivot['lon'], spatial_pivot['lat'], c=spatial_pivot['RAMP-Corrected'],
+                               cmap='viridis', s=1, transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax)
+    axes[1].set_title('RAMP-Corrected Output')
+    axes[1].set_extent(map_extent, crs=ccrs.PlateCarree()) # Set map extent
+
+    # Add a single colorbar for both maps
+    fig.subplots_adjust(right=0.9)
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+    cbar = fig.colorbar(sc_ramp, cax=cbar_ax)
+    cbar.set_label('Ozone (ppb)')
+    
+    plt.savefig(os.path.join(EVAL_PLOT_DIR, f'spatial_before_after_map_month_{month_to_plot}.png'), dpi=300)
+    plt.close()
+    print(f"Saved side-by-side comparison map to {EVAL_PLOT_DIR}")
+
+
+    # 3.2: Spatial Difference Map
     plt.figure(figsize=(12, 6))
     ax = plt.axes(projection=ccrs.PlateCarree())
     ax.add_feature(cfeature.COASTLINE)
     ax.add_feature(cfeature.BORDERS, linestyle=':')
     
-    vmax = np.nanmax(np.abs(spatial_pivot['difference']))
-    vmin = -vmax
+    vmax_diff = np.nanmax(np.abs(spatial_pivot['difference']))
+    vmin_diff = -vmax_diff
     
-    sc = ax.scatter(spatial_pivot['lon'], spatial_pivot['lat'], c=spatial_pivot['difference'],
-                    cmap='coolwarm', s=1, transform=ccrs.PlateCarree(), vmin=vmin, vmax=vmax)
+    sc_diff = ax.scatter(spatial_pivot['lon'], spatial_pivot['lat'], c=spatial_pivot['difference'],
+                         cmap='coolwarm', s=1, transform=ccrs.PlateCarree(), vmin=vmin_diff, vmax=vmax_diff)
     
-    plt.colorbar(sc, label='Difference (RAMP - Original) in ppb')
+    ax.set_extent(map_extent, crs=ccrs.PlateCarree()) # Set map extent
+    
+    plt.colorbar(sc_diff, label='Difference (RAMP - Original) in ppb')
     plt.title(f'Spatial Impact of RAMP Correction - Month {month_to_plot}')
     plt.savefig(os.path.join(EVAL_PLOT_DIR, f'spatial_difference_map_month_{month_to_plot}.png'), dpi=300)
     plt.close()
     print(f"Saved spatial difference map to {EVAL_PLOT_DIR}")
 
-    # --- NEW: Spatial Map of RAMP-Corrected Values ---
-    plt.figure(figsize=(12, 6))
-    ax = plt.axes(projection=ccrs.PlateCarree())
-    ax.add_feature(cfeature.COASTLINE)
-    ax.add_feature(cfeature.BORDERS, linestyle=':')
-    
-    sc_ramp = ax.scatter(spatial_pivot['lon'], spatial_pivot['lat'], c=spatial_pivot['RAMP-Corrected'],
-                         cmap='viridis', s=1, transform=ccrs.PlateCarree())
-    
-    plt.colorbar(sc_ramp, label='RAMP-Corrected Ozone (ppb)')
-    plt.title(f'RAMP-Corrected Ozone Field - Month {month_to_plot}')
-    plt.savefig(os.path.join(EVAL_PLOT_DIR, f'spatial_ramp_corrected_map_month_{month_to_plot}.png'), dpi=300)
-    plt.close()
-    print(f"Saved RAMP-corrected spatial map to {EVAL_PLOT_DIR}")
-
-    # 3.2: Scatter Plots
+    # 3.3: Scatter Plots
     fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
     
     # Original Model vs. Obs
@@ -281,7 +319,7 @@ def perform_visual_evaluation(eval_df, gridded_long_df):
     plt.close()
     print(f"Saved scatter plot comparison to {EVAL_PLOT_DIR}")
 
-    # 3.3: Time Series Analysis by Region
+    # 3.4: Time Series Analysis by Region
     timeseries_df = eval_df.melt(id_vars=['region', 'month'], 
                                  value_vars=['observed_ozone', 'original_model_ozone', 'ramp_corrected_ozone'],
                                  var_name='source', value_name='ozone')
@@ -303,7 +341,7 @@ def perform_visual_evaluation(eval_df, gridded_long_df):
     plt.close()
     print(f"Saved faceted regional time series plot to {EVAL_PLOT_DIR}")
 
-    # --- NEW: Distribution Plot (Histogram/KDE) ---
+    # 3.5: Distribution Plot (Histogram/KDE)
     plt.figure(figsize=(10, 7))
     sns.kdeplot(data=eval_df['observed_ozone'], label='Observations', fill=True, alpha=0.5)
     sns.kdeplot(data=eval_df['original_model_ozone'], label='Original Model', fill=True, alpha=0.5)
@@ -317,7 +355,6 @@ def perform_visual_evaluation(eval_df, gridded_long_df):
     plt.savefig(os.path.join(EVAL_PLOT_DIR, 'distribution_comparison.png'), dpi=300)
     plt.close()
     print(f"Saved distribution comparison plot to {EVAL_PLOT_DIR}")
-
 
 
 # --- Main Execution ---

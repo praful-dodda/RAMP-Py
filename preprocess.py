@@ -153,6 +153,18 @@ def get_ozone_file(source, year, month=None):
             "pattern": "TOAR-II-monthly-mda8-{year}.csv",
             "start_year": 1990,
             "end_year": 2023
+        },
+        "NJML": {
+            "dir": "nanjing university ML/yearlyFiles",
+            "pattern": "mda8_ozone_{year}.csv",
+            "start_year": 2003,
+            "end_year": 2019
+        },
+        "UKML": {
+            "dir": "UK Cambridge ML/yearlyFiles",
+            "pattern": "reshaped_popwt_ozone_{year}.csv",
+            "start_year": 1990,
+            "end_year": 2019
         }
     }
     

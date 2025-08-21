@@ -260,11 +260,13 @@ if __name__ == "__main__":
     # convert_source_to_netcdf_direct("AM4", output_dir="./data/netcdf_combined")
     
     # Or process all sources
+    # convert_all_sources_direct(output_dir="./data/netcdf_combined", 
+    #                        selected_sources=["AM4", "CAMS", "GEOS-CF", "CESM1-CAM4-Chem", 
+    #                                          "CESM1-WACCM", "CESM2.2", "CHASER", "GEOS-CF", 
+    #                                          "GEOS-chem", "GEOS-GMI", "GFDL-AM3", "MERRA2-GMI", 
+    #                                          "MOCAGE", "MRI-ESM1", "MRI-ESM2", "TCR-2"])
     convert_all_sources_direct(output_dir="./data/netcdf_combined", 
-                           selected_sources=["AM4", "CAMS", "GEOS-CF", "CESM1-CAM4-Chem", 
-                                             "CESM1-WACCM", "CESM2.2", "CHASER", "GEOS-CF", 
-                                             "GEOS-chem", "GEOS-GMI", "GFDL-AM3", "MERRA2-GMI", 
-                                             "MOCAGE", "MRI-ESM1", "MRI-ESM2", "TCR-2"])
+                           selected_sources=["TOAR-II"])
     # convert_all_sources_direct(output_dir="./data/netcdf_combined", 
     #                        selected_sources=["M3fusion"])
     
