@@ -339,7 +339,7 @@ def print_ozone_file_info(source, year, month=None):
         print(f"Unsupported file format for file: {file_path}")
         return None
     
-def analyze_yearly_ozone_dataset(source="TCR-2", year=2015):
+def analyze_yearly_ozone_dataset(source="TCR-2", year=2015, deduplicate=False):
     """
     Perform exploratory data analysis on an ozone dataset for a specific year.
     
