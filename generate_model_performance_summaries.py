@@ -99,70 +99,127 @@ def load_file_flexible(base_path):
         return None
 
 
-def merge_ramp_corrected_values(collocated_df, lambda1_df, model_name, year):
+def merge_ramp_corrected_values(collocated_df, lambda1_df, original_model_df):
     """
-    Merge pre-computed RAMP-corrected values from lambda1 file with collocated data.
+    Merge pre-computed RAMP-corrected values with collocated observations.
+
+    This follows the approach from evaluate_ramp_correction.py:
+    1. Combine original model grid with RAMP-corrected grid (lambda1)
+    2. Convert to long format with both original and RAMP values
+    3. Use collocated observation locations to extract relevant grid points
+    4. Match observations to grid using the model grid coordinates already in collocated data
 
     Note: lambda1 files contain the final RAMP-corrected ozone values (NOT correction
-    factors). This function simply merges them with collocated observations for
-    performance evaluation. No RAMP computation is performed here.
+    factors). This function merges them with observations for evaluation.
 
     Parameters:
     -----------
     collocated_df : pd.DataFrame
         Collocated observations with original model outputs
+        Must have: lon_model, lat_model, month, observed_ozone, model_ozone
     lambda1_df : pd.DataFrame
         RAMP-corrected ozone values (DMA8_1...DMA8_12) - already computed by RAMP
-    model_name : str
-        Model identifier
-    year : int
-        Year of data
+    original_model_df : pd.DataFrame
+        Original model grid data (DMA8_1...DMA8_12)
 
     Returns:
     --------
-    pd.DataFrame with 'ramp_corrected_ozone' column added
+    pd.DataFrame with both 'model_ozone' and 'ramp_corrected_ozone' columns
     """
-    df = collocated_df.copy()
+    from scipy.spatial import cKDTree
 
     # Ensure we have the necessary columns
-    if 'model_ozone' not in df.columns or 'observed_ozone' not in df.columns:
-        raise ValueError(f"Missing required columns in collocated data for {model_name} {year}")
+    if 'observed_ozone' not in collocated_df.columns:
+        raise ValueError(f"Missing observed_ozone in collocated data")
 
-    # Rename lambda1 columns for merging
-    lambda1_df = lambda1_df.copy()
+    # Step 1: Rename lambda1 columns for clarity
+    lambda1_renamed = lambda1_df.copy()
+    dma_cols = {f'DMA8_{i}': f'ramp_corrected_{i}' for i in range(1, 13)}
+    lambda1_renamed.rename(columns=dma_cols, inplace=True)
 
-    # Create a mapping for each month
-    # Lambda1_df has columns: lon, lat, DMA8_1, DMA8_2, ..., DMA8_12
-    # where DMA8_i represents the corrected value for month i
+    # Step 2: Combine original model grid with RAMP corrections
+    # Both should have lon, lat columns
+    gridded_eval_df = pd.concat([original_model_df, lambda1_renamed], axis=1)
 
-    # We need to match each row in collocated_df by (lon, lat, month)
-    # to get the corresponding RAMP-corrected value
-
-    # Melt lambda1 to long format
-    lambda1_long = lambda1_df.melt(
+    # Step 3: Convert to long format
+    gridded_long = pd.melt(
+        gridded_eval_df,
         id_vars=['lon', 'lat'],
-        value_vars=[f'DMA8_{i}' for i in range(1, 13)],
-        var_name='month_str',
-        value_name='ramp_corrected_ozone'
+        var_name='var_month',
+        value_name='ozone'
     )
-    lambda1_long['month'] = lambda1_long['month_str'].str.replace('DMA8_', '').astype(int)
-    lambda1_long = lambda1_long.drop(columns=['month_str'])
+    gridded_long['month'] = gridded_long['var_month'].str.extract(r'_(\d+)').astype(int)
+    gridded_long['source'] = np.where(
+        gridded_long['var_month'].str.contains('ramp'),
+        'RAMP-Corrected',
+        'Original Model'
+    )
+    gridded_long.drop(columns=['var_month'], inplace=True)
 
-    # Merge with collocated data
-    # Match on model grid location and month
-    df = df.merge(
-        lambda1_long,
-        left_on=['lon_model', 'lat_model', 'month'],
+    # Step 4: Pivot to have original and RAMP as separate columns
+    gridded_pivot = gridded_long.pivot_table(
+        index=['lon', 'lat', 'month'],
+        columns='source',
+        values='ozone'
+    ).reset_index()
+    gridded_pivot.rename(
+        columns={
+            'Original Model': 'original_model_ozone',
+            'RAMP-Corrected': 'ramp_corrected_ozone'
+        },
+        inplace=True
+    )
+
+    # Step 5: Extract observation locations from collocated data
+    obs_df = collocated_df[['lon_toar', 'lat_toar', 'observed_ozone', 'month']].copy()
+
+    # Add region, season, type if available
+    for col in ['region', 'season', 'type', 'id', 'country', 'lon_model', 'lat_model']:
+        if col in collocated_df.columns:
+            obs_df[col] = collocated_df[col]
+
+    obs_df.rename(columns={'lon_toar': 'lon_obs', 'lat_toar': 'lat_obs'}, inplace=True)
+
+    # Step 6: Find nearest grid points for observations
+    grid_coords = gridded_pivot[['lon', 'lat']].drop_duplicates()
+    tree = cKDTree(grid_coords.values)
+
+    # Query using observation coordinates
+    _, indices = tree.query(obs_df[['lon_obs', 'lat_obs']].values, k=1)
+
+    # Get the coordinates of the nearest grid points
+    nearest_grid_points = grid_coords.iloc[indices].reset_index(drop=True)
+    obs_df['grid_lon'] = nearest_grid_points['lon'].values
+    obs_df['grid_lat'] = nearest_grid_points['lat'].values
+
+    # Step 7: Merge observations with gridded data
+    eval_df = pd.merge(
+        obs_df,
+        gridded_pivot,
+        left_on=['grid_lon', 'grid_lat', 'month'],
         right_on=['lon', 'lat', 'month'],
         how='left',
-        suffixes=('', '_lambda')
+        suffixes=('', '_grid')
     )
 
-    # Clean up duplicate columns
-    if 'lon_lambda' in df.columns:
-        df = df.drop(columns=['lon_lambda', 'lat_lambda'])
+    # Rename for consistency with collocated data
+    eval_df.rename(columns={'original_model_ozone': 'model_ozone'}, inplace=True)
 
-    return df
+    # Add region tagging if not already present
+    if 'region' not in eval_df.columns:
+        eval_df['region'] = eval_df.apply(
+            lambda row: get_region(row['lat_obs'], row['lon_obs']),
+            axis=1
+        )
+
+    # Add season tagging if not already present
+    if 'season' not in eval_df.columns:
+        eval_df['season'] = eval_df.apply(
+            lambda row: get_season(row['month'], row['lat_obs']),
+            axis=1
+        )
+
+    return eval_df
 
 
 def calculate_metrics_before_after(df_group):
@@ -236,7 +293,20 @@ def process_single_model_year(model_name, year):
     # Load data files
     # -------------------------------------------------------------------------
 
-    # 1. Collocated data
+    # 1. Original model grid data
+    try:
+        original_model_file = get_ozone_file(model_name, year)
+        if original_model_file is None:
+            print(f"  ❌ ERROR: Could not find original model file for {model_name} {year}")
+            return None
+
+        original_model_df = pd.read_csv(original_model_file)
+        print(f"  ✓ Loaded original model data: {original_model_file}")
+    except Exception as e:
+        print(f"  ❌ ERROR: Failed to load original model data: {e}")
+        return None
+
+    # 2. Collocated data
     collocated_path = f"{RAMP_DATA_DIR}/collocated_data_{model_name}_{year}"
     collocated_df = load_file_flexible(collocated_path)
 
@@ -246,7 +316,7 @@ def process_single_model_year(model_name, year):
 
     print(f"  ✓ Loaded collocated data: {len(collocated_df)} observations")
 
-    # 2. RAMP lambda1 corrections
+    # 3. RAMP lambda1 corrections
     lambda1_path = f"{RAMP_DATA_DIR}/lambda1_{model_name}_{year}_{VERSION}"
     lambda1_df = load_file_flexible(lambda1_path)
 
@@ -260,8 +330,8 @@ def process_single_model_year(model_name, year):
     # Merge pre-computed RAMP-corrected values
     # -------------------------------------------------------------------------
 
-    print("  ⚙ Merging RAMP-corrected values from lambda1 file...")
-    df = merge_ramp_corrected_values(collocated_df, lambda1_df, model_name, year)
+    print("  ⚙ Merging RAMP-corrected values with observations...")
+    df = merge_ramp_corrected_values(collocated_df, lambda1_df, original_model_df)
 
     # Remove rows with NaN in critical columns
     initial_count = len(df)
