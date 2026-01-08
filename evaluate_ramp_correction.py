@@ -12,7 +12,7 @@ from preprocess import get_ozone_file
 
 # --- Configuration ---
 # Update these paths to match your file locations and names
-MODEL_NAME = "UKML" # The model you are evaluating
+MODEL_NAME = "IASI-GOME2" # The model you are evaluating
 YEAR = 2017 # The year you ran the analysis for
 VERSION = "v3-parallel" # The version name you used for saving files
 FILE_FORMAT = "parquet" # Change to 'parquet' if you prefer that format

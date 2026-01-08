@@ -165,6 +165,24 @@ def get_ozone_file(source, year, month=None):
             "pattern": "reshaped_popwt_ozone_{year}.csv",
             "start_year": 1990,
             "end_year": 2019
+        },
+        "OMI-MLS":{
+            "dir": "BME corrected satellite data 2005-2022/reformatted_data/",
+            "pattern": "correct_omi_mls_{year}_framp_format.csv",
+            "start_year": 2005,
+            "end_year": 2020
+        },
+        "IASI-GOME2": {
+            "dir": "BME corrected satellite data 2005-2022/reformatted_data/",
+            "pattern": "correct_IASI_GOME2_{year}_framp_format.csv",
+            "start_year": 2017,
+            "end_year": 2020
+        },
+        "CRIS":{
+            "dir": "BME corrected satellite data 2005-2022/reformatted_data/",
+            "pattern": "correct_CrIs_{year}_framp_format.csv",
+            "start_year": 2022,
+            "end_year": 2022
         }
     }
     
