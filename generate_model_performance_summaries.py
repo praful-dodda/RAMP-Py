@@ -99,16 +99,20 @@ def load_file_flexible(base_path):
         return None
 
 
-def apply_ramp_correction(collocated_df, lambda1_df, model_name, year):
+def merge_ramp_corrected_values(collocated_df, lambda1_df, model_name, year):
     """
-    Apply RAMP correction to collocated data using lambda1 values.
+    Merge pre-computed RAMP-corrected values from lambda1 file with collocated data.
+
+    Note: lambda1 files contain the final RAMP-corrected ozone values (NOT correction
+    factors). This function simply merges them with collocated observations for
+    performance evaluation. No RAMP computation is performed here.
 
     Parameters:
     -----------
     collocated_df : pd.DataFrame
-        Collocated observations with model outputs
+        Collocated observations with original model outputs
     lambda1_df : pd.DataFrame
-        RAMP lambda1 correction factors (bias correction)
+        RAMP-corrected ozone values (DMA8_1...DMA8_12) - already computed by RAMP
     model_name : str
         Model identifier
     year : int
@@ -253,11 +257,11 @@ def process_single_model_year(model_name, year):
     print(f"  ✓ Loaded RAMP corrections: {len(lambda1_df)} grid points")
 
     # -------------------------------------------------------------------------
-    # Apply RAMP correction
+    # Merge pre-computed RAMP-corrected values
     # -------------------------------------------------------------------------
 
-    print("  ⚙ Applying RAMP corrections...")
-    df = apply_ramp_correction(collocated_df, lambda1_df, model_name, year)
+    print("  ⚙ Merging RAMP-corrected values from lambda1 file...")
+    df = merge_ramp_corrected_values(collocated_df, lambda1_df, model_name, year)
 
     # Remove rows with NaN in critical columns
     initial_count = len(df)
