@@ -5,32 +5,70 @@ import seaborn as sns
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import os
+import argparse
+import sys
 
 # Assuming your original evaluation functions are in this file
 from evaluate_models import calculate_performance_metrics, get_region
 from preprocess import get_ozone_file
 
-# --- Configuration ---
-# Update these paths to match your file locations and names
-MODEL_NAME = "IASI-GOME2" # The model you are evaluating
-YEAR = 2017 # The year you ran the analysis for
-VERSION = "v3-parallel" # The version name you used for saving files
-FILE_FORMAT = "parquet" # Change to 'parquet' if you prefer that format
 
-# File Paths
-RAMP_DATA_DIR = './ramp_data'
-MODEL_DATA_DIR = '.' # Assuming model data is in the current directory
-COLLOCATED_DATA_PATH = f'./ramp_data/collocated_data_{MODEL_NAME}_{YEAR}.csv'
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Evaluate RAMP correction results for a specific model and year'
+    )
+    parser.add_argument(
+        '--model',
+        type=str,
+        required=False,
+        default="IASI-GOME2",
+        help='Model name (e.g., M3fusion, UKML, GEOS-CF)'
+    )
+    parser.add_argument(
+        '--year',
+        type=int,
+        required=False,
+        default=2017,
+        help='Year to evaluate (e.g., 2017)'
+    )
+    parser.add_argument(
+        '--version',
+        type=str,
+        default='v3-parallel',
+        help='RAMP version identifier (default: v3-parallel)'
+    )
+    parser.add_argument(
+        '--ramp-data-dir',
+        type=str,
+        default='./ramp_data',
+        help='Directory containing RAMP results (default: ./ramp_data)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default='./ramp_evaluation_plots',
+        help='Base output directory for plots (default: ./ramp_evaluation_plots)'
+    )
 
-# Ensure the collocated data file exists
-if not os.path.exists(COLLOCATED_DATA_PATH):
-    print(f"Error: The collocated data file {COLLOCATED_DATA_PATH} does not exist.")
-    print("Please ensure the collocated data is generated and saved before running this script.")
-    # exit(1)
+    return parser.parse_args()
 
-# Output directory for evaluation plots
-EVAL_PLOT_DIR = f'ramp_evaluation_plots/{MODEL_NAME}_{YEAR}_{VERSION}'
-os.makedirs(EVAL_PLOT_DIR, exist_ok=True)
+
+def setup_configuration(model_name, year, version, ramp_data_dir, output_dir):
+    """Setup configuration dictionary from arguments."""
+    config = {
+        'MODEL_NAME': model_name,
+        'YEAR': year,
+        'VERSION': version,
+        'RAMP_DATA_DIR': ramp_data_dir,
+        'MODEL_DATA_DIR': '.',
+        'EVAL_PLOT_DIR': os.path.join(output_dir, f'{model_name}_{year}_{version}')
+    }
+
+    # Create output directory
+    os.makedirs(config['EVAL_PLOT_DIR'], exist_ok=True)
+
+    return config
 
 
 # --- Step 1: Data Loading and Preparation ---
@@ -38,7 +76,7 @@ def load_lambda_data(filepath_base):
     """Tries to load a .parquet file, falls back to .csv."""
     parquet_path = f"{filepath_base}.parquet"
     csv_path = f"{filepath_base}.csv"
-    
+
     if os.path.exists(parquet_path):
         print(f"Loading {parquet_path}")
         return pd.read_parquet(parquet_path)
@@ -49,20 +87,26 @@ def load_lambda_data(filepath_base):
         print(f"Warning: Could not find file for base path: {filepath_base}")
         return None
 
-def load_and_prepare_data():
+def load_and_prepare_data(config):
     """
     Loads all necessary data files, applies the RAMP correction,
     and merges everything into a unified DataFrame for evaluation.
     """
+    MODEL_NAME = config['MODEL_NAME']
+    YEAR = config['YEAR']
+    VERSION = config['VERSION']
+    RAMP_DATA_DIR = config['RAMP_DATA_DIR']
+
     print("--- Step 1: Loading and Preparing Data ---")
-    
+    print(f"Model: {MODEL_NAME}, Year: {YEAR}, Version: {VERSION}")
+
     # 1.1: Load the datasets
     try:
         # Original gridded model output
         original_model_file = get_ozone_file(MODEL_NAME, YEAR)
         if original_model_file is None:
             raise FileNotFoundError(f"Could not find model file for {MODEL_NAME} in {YEAR}.")
-        
+
         # Load the original model data
         original_model_df = pd.read_csv(original_model_file)
         print(f"Loaded original model data: {original_model_file}")
@@ -73,16 +117,20 @@ def load_and_prepare_data():
         if lambda1_df is None:
             raise FileNotFoundError(f"Could not find RAMP lambda1 data file: {lambda1_file} in csv or parquet format.")
         print(f"Loaded RAMP lambda1 data: {lambda1_file}")
-        
+
         # Collocated data which contains observations
-        # Try loading CSV first, then parquet if CSV fails
-        try:
-            collocated_df = pd.read_csv(COLLOCATED_DATA_PATH)
-            print(f"Loaded collocated observation data: {COLLOCATED_DATA_PATH}")
-        except FileNotFoundError:
-            parquet_path = COLLOCATED_DATA_PATH.replace('.csv', '.parquet')
-            collocated_df = pd.read_parquet(parquet_path)
-            print(f"Loaded collocated observation data: {parquet_path}")
+        collocated_path_csv = f'{RAMP_DATA_DIR}/collocated_data_{MODEL_NAME}_{YEAR}.csv'
+        collocated_path_parquet = f'{RAMP_DATA_DIR}/collocated_data_{MODEL_NAME}_{YEAR}.parquet'
+
+        # Try loading parquet first, then CSV
+        if os.path.exists(collocated_path_parquet):
+            collocated_df = pd.read_parquet(collocated_path_parquet)
+            print(f"Loaded collocated observation data: {collocated_path_parquet}")
+        elif os.path.exists(collocated_path_csv):
+            collocated_df = pd.read_csv(collocated_path_csv)
+            print(f"Loaded collocated observation data: {collocated_path_csv}")
+        else:
+            raise FileNotFoundError(f"Could not find collocated data for {MODEL_NAME} {YEAR}")
 
     except FileNotFoundError as e:
         print(f"Error: Could not find a required data file. {e}")
@@ -213,10 +261,12 @@ def _annotate_plot(ax, x_data, y_data):
 
 # --- Step 3: Visual Evaluation (MODIFIED) ---
 
-def perform_visual_evaluation(eval_df, gridded_long_df):
+def perform_visual_evaluation(eval_df, gridded_long_df, config):
     """
     Generates a series of plots to visually compare the datasets.
     """
+    EVAL_PLOT_DIR = config['EVAL_PLOT_DIR']
+
     print("\n--- Step 3: Generating Visualizations ---")
     if eval_df is None or gridded_long_df is None:
         print("DataFrames not available. Skipping visualizations.")
@@ -359,18 +409,42 @@ def perform_visual_evaluation(eval_df, gridded_long_df):
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # First, we need to ensure the collocated_df is saved somewhere.
-    # If it's generated by another script, make sure it saves the file.
-    # For this script to run, we are assuming 'collocated_df.csv' exists.
-    # You might need to add a line like this to your main analysis script:
-    # `collocated_df.to_csv(COLLOCATED_DATA_PATH, index=False)`
-    
+    # Parse command line arguments
+    args = parse_arguments()
+
+    print("="*70)
+    print("RAMP Evaluation - Visual and Statistical Analysis")
+    print("="*70)
+    print(f"Model: {args.model}")
+    print(f"Year: {args.year}")
+    print(f"Version: {args.version}")
+    print("="*70)
+
+    # Setup configuration
+    config = setup_configuration(
+        args.model,
+        args.year,
+        args.version,
+        args.ramp_data_dir,
+        args.output_dir
+    )
+
     # Run the full evaluation
-    evaluation_df, gridded_df = load_and_prepare_data()
-    
-    if evaluation_df is not None:
-        perform_statistical_evaluation(evaluation_df)
-        perform_visual_evaluation(evaluation_df, gridded_df)
-        print("\nEvaluation complete.")
-    else:
-        print("\nEvaluation could not be completed due to data loading errors.")
+    try:
+        evaluation_df, gridded_df = load_and_prepare_data(config)
+
+        if evaluation_df is not None:
+            perform_statistical_evaluation(evaluation_df)
+            perform_visual_evaluation(evaluation_df, gridded_df, config)
+            print("\n" + "="*70)
+            print("✅ Evaluation complete!")
+            print(f"📁 Plots saved to: {config['EVAL_PLOT_DIR']}")
+            print("="*70)
+        else:
+            print("\n❌ Evaluation could not be completed due to data loading errors.")
+            sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
